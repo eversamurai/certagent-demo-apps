@@ -13,6 +13,8 @@ command from `D:\dev\demo_apps` in Git Bash. CertAgent itself runs from `D:\dev\
   `export OLLAMA_MODEL=<tag>`.
 - In the terminal that will run CertAgent: `export JAVA_HOME="/c/Program Files/Java/jdk-23.0.1"`.
 - `cert-verif-app` is next to this repo. If it isn't, `export CERTAGENT_HOME=/d/path/to/cert-verif-app`.
+  It needs the lab fixes from its `lab-fixes` branch (Git Bash paths, CA provisioner password, nginx serving
+  RSA 1024), or merged into `main`. Without them `init.sh` can't issue certs and `break.sh weak` fails.
 - Ports 8080, 8443, 8444, 9000, 8088 and 8090 are free.
 
 ## 2. Screen layout
