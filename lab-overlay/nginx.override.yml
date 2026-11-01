@@ -1,0 +1,13 @@
+# Overlay for cert-verif-app's lab/docker-compose.yml. Swaps only nginx's config for the one that
+# proxies demo.lab -> storefront and shop.prod -> checkout. Everything else (ports, aliases, cert and
+# webroot mounts, conf.d) comes from the lab file unchanged.
+#
+# Compose resolves relative paths against the FIRST -f file (in cert-verif-app), so this path is
+# absolute: demo/reset.sh exports DEMO_APPS (this repo's root, Windows-style on Git Bash).
+#
+#   docker compose -f "$CERTAGENT_HOME/lab/docker-compose.yml" -f lab-overlay/nginx.override.yml \
+#     up -d --force-recreate nginx
+services:
+  nginx:
+    volumes:
+      - ${DEMO_APPS:?set DEMO_APPS to this repo's root}/lab-overlay/nginx.conf:/etc/nginx/nginx.conf:ro
