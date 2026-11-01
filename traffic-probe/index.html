@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traffic probe</title>
+<style>
+  /* Same palette as CertAgent's timeline (dark). System fonts only: nothing leaves the network. */
+  :root {
+    --bg: #0d1117;
+    --panel: #151b23;
+    --panel-2: #1b2330;
+    --line: #2a3442;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --faint: #5c6878;
+    --ok: #3fb950;
+    --ok-bg: rgba(63, 185, 80, .12);
+    --bad: #f85149;
+    --bad-bg: rgba(248, 81, 73, .12);
+    --warn: #d29922;
+    --warn-bg: rgba(210, 153, 34, .14);
+    --info: #58a6ff;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 18px 16px 24px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .live { font: 13px var(--mono); color: var(--muted); white-space: nowrap; }
+  header .live.stale { color: var(--bad); }
+
+  .tile { background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--faint);
+          border-radius: 10px; padding: 18px 20px 16px; margin-bottom: 16px; }
+  .tile.OK   { border-left-color: var(--ok); }
+  .tile.WARN { border-left-color: var(--warn); }
+  .tile.FAIL { border-left-color: var(--bad); background: linear-gradient(var(--bad-bg), var(--bad-bg)), var(--panel); }
+
+  .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .name { font: 600 28px var(--mono); }
+  .endpoint { color: var(--muted); font: 14px var(--mono); margin-top: 2px; }
+  .env { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font: 600 12px var(--sans);
+         vertical-align: 5px; border: 1px solid var(--line); color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .env.prod { color: var(--warn); border-color: var(--warn); }
+
+  .state { font: 800 64px/1 var(--sans); letter-spacing: 1px; text-align: right; }
+  .state.OK { color: var(--ok); } .state.WARN { color: var(--warn); } .state.FAIL { color: var(--bad); }
+  .state.NONE { color: var(--faint); }
+  .meta { color: var(--muted); font: 13px var(--mono); text-align: right; margin-top: 6px; }
+
+  .why { margin: 12px 0 14px; font-size: 19px; min-height: 28px; }
+  .why .raw { display: block; color: var(--muted); font: 13px var(--mono); margin-top: 2px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .why.OK   { color: var(--ok); } .why.WARN { color: var(--warn); } .why.FAIL { color: var(--bad); }
+
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line);
+           border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .fact { background: var(--panel-2); padding: 8px 12px; min-width: 0; }
+  .fact .k { color: var(--faint); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .fact .v { font: 600 16px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fact .v.warn { color: var(--warn); } .fact .v.bad { color: var(--bad); }
+  .fact .v.fp { color: var(--info); }
+
+  .strip-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+  .strip { display: grid; grid-template-columns: repeat(60, 1fr); gap: 2px; flex: 1; }
+  .strip i { display: block; height: 18px; border-radius: 2px; background: var(--line); }
+  .strip i.O { background: var(--ok); } .strip i.W { background: var(--warn); } .strip i.F { background: var(--bad); }
+  .totals { font: 13px var(--mono); color: var(--muted); white-space: nowrap; }
+  .totals b.ok { color: var(--ok); } .totals b.bad { color: var(--bad); }
+  .legend { color: var(--faint); font-size: 12px; margin-top: 4px; }
+
+  footer { color: var(--faint); font-size: 13px; text-align: center; }
+
+  @media (max-width: 640px) {
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    .state { font-size: 44px; }
+    .strip i { height: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Traffic probe</h1>
+      <div class="sub">Real HTTPS clients · trust the lab root CA only · hostname checks on · every 2s</div>
+    </div>
+    <div class="live" id="live">connecting…</div>
+  </header>
+  <div id="tiles"></div>
+  <footer>Strip: last 60 checks (2 min), newest on the right · green OK · amber risky cert · red request failed</footer>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function expiresIn(iso) {
+  const ms = new Date(iso) - Date.now();
+  if (ms <= 0) return 'expired';
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  if (d >= 2) return d + 'd';
+  if (h >= 1) return h + 'h ' + (m % 60) + 'm';
+  return m + 'm';
+}
+
+function tile(t) {
+  const st = t.state || 'NONE';
+  const c = t.cert || {};
+  let why;
+  if (st === 'FAIL') why = `<div class="why FAIL">${esc(t.plain)}<span class="raw">${esc(t.error)}</span></div>`;
+  else if (st === 'WARN') why = `<div class="why WARN">Works, but risky: ${esc(t.warnings.join(' · '))}</div>`;
+  else if (st === 'OK') why = `<div class="why OK">Clients connect normally</div>`;
+  else why = `<div class="why">Waiting for the first check…</div>`;
+
+  const keyBits = parseInt((c.key || '').split(' ')[1] || '0', 10);
+  const keyWeak = (c.key || '').startsWith('RSA') && keyBits < 2048;
+  const hoursLeft = c.notAfter ? (new Date(c.notAfter) - Date.now()) / 3600e3 : 99;
+  const strip = t.history.padStart(60, ' ').split('').map(ch => `<i class="${ch.trim()}"></i>`).join('');
+
+  return `
+  <section class="tile ${st}">
+    <div class="top">
+      <div>
+        <div class="name">${esc(t.name)}<span class="env ${esc(t.env)}">${esc(t.env)}</span></div>
+        <div class="endpoint">GET https://${esc(t.endpoint)}</div>
+      </div>
+      <div>
+        <div class="state ${st}">${st === 'NONE' ? '…' : st}</div>
+        <div class="meta">${t.status ? 'HTTP ' + t.status + ' · ' : ''}${t.latencyMs != null ? t.latencyMs + ' ms' : ''}</div>
+      </div>
+    </div>
+    ${why}
+    <div class="facts">
+      <div class="fact"><div class="k">Issuer</div><div class="v ${st === 'FAIL' && c.issuer ? 'bad' : ''}" title="${esc(c.issuer)}">${esc(c.issuer || '—')}</div></div>
+      <div class="fact"><div class="k">Key</div><div class="v ${keyWeak ? 'warn' : ''}">${esc(c.key || '—')}</div></div>
+      <div class="fact"><div class="k">Expires in</div><div class="v ${hoursLeft < 6 ? 'warn' : ''}" title="${esc(c.notAfter)}">${c.notAfter ? expiresIn(c.notAfter) : '—'}</div></div>
+      <div class="fact"><div class="k">Fingerprint</div><div class="v fp">${esc(c.fp || '—')}</div></div>
+    </div>
+    <div class="strip-row">
+      <div class="strip">${strip}</div>
+      <div class="totals">5 min: <b class="ok">${t.ok5m} ok</b> · <b class="bad">${t.failed5m} failed</b></div>
+    </div>
+  </section>`;
+}
+
+async function poll() {
+  try {
+    const r = await fetch('/api/status', {cache: 'no-store'});
+    const s = await r.json();
+    $('#tiles').innerHTML = s.targets.map(tile).join('');
+    $('#live').textContent = 'live · ' + new Date(s.now).toLocaleTimeString();
+    $('#live').classList.remove('stale');
+  } catch (e) {
+    $('#live').textContent = 'probe unreachable';
+    $('#live').classList.add('stale');
+  }
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>
