@@ -1,0 +1,22 @@
+# Copy of the main repo's spec, kept here for reference only
+SPEC.md
+
+# Build output
+out/
+*.class
+*.jar
+
+# Never commit keys or certs
+*.pem
+*.key
+*.crt
+*.jks
+*.p12
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+.claude/
