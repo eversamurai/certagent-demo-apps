@@ -1,0 +1,34 @@
+# Demo apps for the CertAgent lab: two Java services behind the lab's nginx, and a traffic probe that calls
+# them over HTTPS like real clients. Runs as its own compose project on the lab's network, so the lab's
+# compose file (in cert-verif-app) is not modified.
+#
+#   storefront  <- nginx :443  demo.lab   (no host port; nginx is the only way in)
+#   checkout    <- nginx :8444 shop.prod  (no host port)
+#   traffic-probe -> https://demo.lab/api/products, https://shop.prod:8444/api/orders; page on :8090
+#
+# Start with demo/reset.sh (it brings the lab up first; this network must exist).
+name: certagent-demo
+
+services:
+  storefront:
+    build: ./storefront
+    restart: unless-stopped
+
+  checkout:
+    build: ./checkout
+    restart: unless-stopped
+
+  traffic-probe:
+    build: ./traffic-probe
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      # The whole folder, read-only: mounting just root_ca.crt would make Docker create a directory in its
+      # place if the file did not exist yet. The probe reads only root_ca.crt and re-reads it on every check.
+      - ${CERTAGENT_HOME:-../cert-verif-app}/lab/certs:/certs:ro
+
+networks:
+  default:
+    name: certagent-lab_default
+    external: true
