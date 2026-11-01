@@ -36,6 +36,11 @@ rm -rf "$CERTAGENT_HOME/data"
 wait_state demo.lab  'OK'      60
 wait_state shop.prod 'OK|WARN' 30
 
+# Start the recording with clean strips: forget the failed checks from before nginx was up.
+log "probe: restarting to clear its history"
+"${APPS[@]}" restart traffic-probe >/dev/null
+wait_state demo.lab  'OK'      30
+
 cat <<EOF
 
   Ready.  Probe:    $PROBE
