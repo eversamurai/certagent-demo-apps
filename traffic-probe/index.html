@@ -21,6 +21,7 @@
     --warn: #d29922;
     --warn-bg: rgba(210, 153, 34, .14);
     --info: #58a6ff;
+    --violet: #bc8cff;
     --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
@@ -75,6 +76,25 @@
 
   footer { color: var(--faint); font-size: 13px; text-align: center; }
 
+  /* Live model reasoning, streamed through the reasoning relay. Newest line at the bottom, typed out;
+     older lines move up and fade. */
+  .mind { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px 16px;
+          margin-bottom: 16px; }
+  .mind-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .mind-title { font-weight: 600; font-size: 15px; letter-spacing: .3px; }
+  .mind-title .model { color: var(--info); font: 13px var(--mono); margin-left: 8px; }
+  .mind-state { font: 13px var(--mono); color: var(--faint); white-space: nowrap; }
+  .mind-state.busy { color: var(--violet); animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+  .mind-lines { height: 196px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
+                font: 17px/28px var(--sans); }
+  .mind-lines div { white-space: nowrap; overflow: hidden; transition: opacity .6s; }
+  .mind-lines .say  { color: var(--ok); }
+  .mind-lines .tool { color: var(--info); font: 600 16px/28px var(--mono); }
+  .mind-lines .case { color: var(--faint); font: 13px/28px var(--mono); }
+  .caret { display: inline-block; width: 9px; height: 18px; margin-left: 2px; vertical-align: -3px;
+           background: var(--violet); animation: pulse .9s steps(2) infinite; }
+
   @media (max-width: 640px) {
     .facts { grid-template-columns: repeat(2, 1fr); }
     .state { font-size: 44px; }
@@ -92,6 +112,13 @@
     <div class="live" id="live">connecting…</div>
   </header>
   <div id="tiles"></div>
+  <section class="mind">
+    <div class="mind-head">
+      <div class="mind-title">Model reasoning · live<span class="model" id="mind-model"></span></div>
+      <div class="mind-state" id="mind-state">connecting…</div>
+    </div>
+    <div class="mind-lines" id="mind-lines"></div>
+  </section>
   <footer>Strip: last 60 checks (2 min), newest on the right · green OK · amber risky cert · red request failed</footer>
 </div>
 
@@ -162,6 +189,97 @@ async function poll() {
 }
 poll();
 setInterval(poll, 1000);
+
+// ---- Live reasoning: tokens from the reasoning relay, typed out character by character.
+const MAX_LINES = 7;
+const FADE = [1, .8, .62, .46, .32, .2, .1];
+const lines = $('#mind-lines');
+const measure = document.createElement('canvas').getContext('2d');
+let queue = [];          // pending items: {ch, cls} for text, {line, cls} for a whole line
+let cur = null;          // the line being typed
+let curText = '';
+
+function restyle() {
+  const all = [...lines.children];
+  all.forEach((el, i) => { el.style.opacity = FADE[all.length - 1 - i] ?? 0; });
+  while (lines.children.length > MAX_LINES) lines.firstChild.remove();
+}
+function newLine(cls) {
+  if (cur) cur.querySelector('.caret')?.remove();
+  cur = document.createElement('div');
+  cur.className = cls || '';
+  cur.innerHTML = '<span></span><i class="caret"></i>';
+  curText = '';
+  lines.appendChild(cur);
+  restyle();
+}
+function wholeLine(text, cls) {
+  newLine(cls);
+  cur.firstChild.textContent = text;
+  curText = text;
+  newLine('');
+}
+function typeChar(ch, cls) {
+  if (!cur || (cls || '') !== cur.className) newLine(cls);
+  if (ch === '\n') { if (curText.trim()) newLine(cls); return; }
+  if (ch === ' ' && !curText) return;
+  measure.font = getComputedStyle(cur).font;
+  if (measure.measureText(curText + ch).width > lines.clientWidth - 14) {
+    // Wrap at the last space so words aren't split.
+    const cut = curText.lastIndexOf(' ');
+    const carry = cut > 0 ? curText.slice(cut + 1) : '';
+    if (cut > 0) cur.firstChild.textContent = curText.slice(0, cut);
+    newLine(cls);
+    curText = carry;
+    if (ch === ' ') { cur.firstChild.textContent = curText; return; }
+  }
+  curText += ch;
+  cur.firstChild.textContent = curText;
+}
+function enqueueText(text, cls) { for (const ch of text) queue.push({ ch, cls }); }
+
+// A steady typing speed that speeds up when the model gets ahead, so the panel never lags far behind.
+let last = performance.now(), carry = 0;
+function tick(now) {
+  carry += (now - last) / 1000 * (40 + queue.length * 1.5);
+  last = now;
+  while (carry >= 1 && queue.length) {
+    const item = queue.shift();
+    if (item.line !== undefined) wholeLine(item.line, item.cls); else typeChar(item.ch, item.cls);
+    carry -= 1;
+  }
+  if (!queue.length) carry = 0;
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function setState(text, busy) {
+  $('#mind-state').textContent = text;
+  $('#mind-state').classList.toggle('busy', !!busy);
+}
+
+const RELAY = `http://${location.hostname}:11435/live`;
+const live = new EventSource(RELAY);
+live.onerror = () => setState('relay offline — start it with demo/reset.sh', false);
+live.onmessage = (m) => {
+  const e = JSON.parse(m.data);
+  if (e.type === 'hello') {
+    setState(e.busy ? `thinking about ${e.label}…` : 'idle — waiting for the next decision', e.busy);
+    if (e.busy && e.tail) { queue.push({ line: `— ${e.label} —`, cls: 'case' }); enqueueText(e.tail.slice(-240), ''); }
+  } else if (e.type === 'start') {
+    $('#mind-model').textContent = e.model + ' · local';
+    setState(`thinking about ${e.label}…`, true);
+    queue.push({ line: `— ${e.label} —`, cls: 'case' });
+  } else if (e.type === 'think') {
+    enqueueText(e.text, '');
+  } else if (e.type === 'say') {
+    enqueueText(e.text, 'say');
+  } else if (e.type === 'tool') {
+    queue.push({ line: `→ calls ${e.name}(${e.target})`, cls: 'tool' });
+  } else if (e.type === 'end') {
+    setState(`idle — last decision took ${e.seconds}s`, false);
+  }
+};
 </script>
 </body>
 </html>
