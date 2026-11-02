@@ -38,9 +38,11 @@ command from `D:\dev\demo_apps` in Git Bash. CertAgent itself runs from `D:\dev\
 demo/reset.sh                     # ~1 min; ends with "Ready". Probe: demo.lab OK, shop.prod WARN
 ```
 
-In the `cert-verif-app` terminal:
+In the `cert-verif-app` terminal, point CertAgent at the reasoning relay so the model's thinking streams
+live into the panel under the probe tiles:
 
 ```bash
+export OLLAMA_URL=http://localhost:11435
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--certagent.schedule.run-on-startup=false
 ```
 
@@ -51,6 +53,8 @@ demo/scenario.sh fixed
 ```
 
 Point at these, in order:
+0. **Reasoning panel (bottom of the probe page):** the model's thinking types out live, line by line, with
+   `→ calls verify_handshake(demo.lab)` / `renew_certificate(…)` lines when it acts. Talk over it while it runs.
 1. **Probe: demo.lab goes red.** The tile reads "certificate not trusted — unknown issuer", the issuer is
    *Rogue Corp Root*, and red squares start in the strip.
 2. **Timeline: the demo.lab card appears.** Observed → Diagnosed (untrusted issuer).
@@ -92,6 +96,7 @@ demo/reset.sh        # stop CertAgent first (Ctrl+C); removes the broken conf.d 
 | Card shows **Unresolved** or no renew in take 1 | The run may have used up `max-actions-per-run` (10 tool calls, verifies included). Reset and record again. If it happens again, record cases 1 and 2 as separate takes using `scenario.sh approval`. |
 | nginx won't start / `reset.sh` says "nginx -t fails" | Look at `cert-verif-app/lab/conf.d/` (`reset.sh` empties it) and at `docker compose -p certagent-lab logs nginx`. Never restart nginx between `break.sh reload` and a reset. |
 | Probe shows FAIL "service behind nginx is not answering" (HTTP 502) | An app container is down: `docker compose -f compose.yml ps`, then `docker compose -f compose.yml up -d`. |
+| Reasoning panel says "relay offline", or stays idle during a run | `docker compose -f compose.yml logs reasoning-relay`. Check that CertAgent was started with `OLLAMA_URL=http://localhost:11435`. |
 | Probe page doesn't load | `docker compose -f compose.yml logs traffic-probe`. Port 8090 may be busy. |
 | `reset.sh` refuses: "CertAgent is running" | Stop it with Ctrl+C first, so the timeline is really cleared. |
 | Ports busy | `netstat -ano \| grep -E ':(8080\|8443\|8444\|9000\|8088\|8090) '`, then stop whatever holds the port. |

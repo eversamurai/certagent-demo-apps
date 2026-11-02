@@ -13,6 +13,7 @@ when a certificate breaks and recover when CertAgent fixes it.
 | storefront | `storefront/` | Java 21 (JDK only) HTTP service: product catalogue. `/`, `/api/health`, `/api/products` |
 | checkout | `checkout/` | The same, for payments: `/`, `/api/health`, `/api/orders` |
 | traffic-probe | `traffic-probe/` | Java 21 HTTPS client checking both sites every 2s, plus a status page on **:8090** |
+| reasoning-relay | `reasoning-relay/` | Java 21 proxy between CertAgent and Ollama on **:11435**. Asks Ollama for a stream, publishes the thinking tokens on `/live` (server-sent events), and returns the same single answer CertAgent expects |
 | nginx overlay | `lab-overlay/` | The lab's `nginx.conf`, with `proxy_pass` to the apps in place of placeholder text, plus a compose override that swaps it in |
 | compose | `compose.yml` | Project `certagent-demo`: the apps and the probe on the lab's network (`certagent-lab_default`) |
 | scripts | `demo/` | `reset.sh`, `scenario.sh fixed\|approval\|rollback`, `RUNBOOK.md` |
@@ -70,7 +71,8 @@ The lab (step-ca, nginx, `init.sh`, `break.sh`) lives in `cert-verif-app/lab/`, 
 
 | Port | What |
 |---|---|
-| 8090 | Traffic probe page (new) |
+| 8090 | Traffic probe page (new), with the live reasoning panel |
+| 11435 | Reasoning relay (new): start CertAgent with `OLLAMA_URL=http://localhost:11435` |
 | 8080, 8443, 8444, 9000 | The lab, unchanged (nginx http, demo.lab, shop.prod, step-ca) |
 | 8088 | CertAgent |
 

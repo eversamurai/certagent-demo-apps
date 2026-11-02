@@ -48,6 +48,7 @@ cat <<EOF
 
   Start CertAgent in $CERTAGENT_HOME:
     export JAVA_HOME="/c/Program Files/Java/jdk-23.0.1"
+    export OLLAMA_URL=http://localhost:11435     # through the reasoning relay: live reasoning on the probe page
     ./mvnw spring-boot:run -Dspring-boot.run.arguments=--certagent.schedule.run-on-startup=false
 
   Then: demo/scenario.sh fixed
