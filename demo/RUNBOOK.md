@@ -16,6 +16,10 @@ command from `D:\dev\demo_apps` in Git Bash. CertAgent itself runs from `D:\dev\
   It needs the lab fixes from its `lab-fixes` branch (Git Bash paths, CA provisioner password, nginx serving
   RSA 1024), or merged into `main`. Without them `init.sh` can't issue certs and `break.sh weak` fails.
 - Ports 8080, 8443, 8444, 9000, 8088 and 8090 are free.
+- **Timing (measured 2026-11-01, RTX 4070 12 GB, model partly on CPU):** each take runs for about **20 minutes**.
+  The first model call of a fresh Ollama session took 12.5 min, and later calls took 1–5 min each. Record the
+  whole run and cut out the waiting while you edit. Do one throwaway run first, so the model is already
+  loaded when you record.
 
 ## 2. Screen layout
 

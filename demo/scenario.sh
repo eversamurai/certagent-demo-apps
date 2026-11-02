@@ -37,7 +37,7 @@ log "CertAgent run $run started — watch the timeline"
 
 # Track the worst probe state for demo.lab while the agent works: the rollback case must never show FAIL.
 worst=OK
-for ((i = 0; i < 600; i++)); do
+for ((i = 0; i < 2700; i++)); do   # up to ~45 min: a local 30B model can be slow
   s=$(probe_state demo.lab)
   [[ $s == FAIL ]] && worst=FAIL
   [[ $s == WARN && $worst == OK ]] && worst=WARN
@@ -45,7 +45,7 @@ for ((i = 0; i < 600; i++)); do
   [[ $running == False ]] && break
   sleep 1
 done
-[[ $running == False ]] || fail "run $run still going after 10 minutes"
+[[ $running == False ]] || fail "run $run still going after 45 minutes"
 
 # Give the probe one more check after the final reload before comparing fingerprints.
 sleep 3
