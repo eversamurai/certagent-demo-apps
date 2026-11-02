@@ -28,6 +28,18 @@ services:
       # place if the file did not exist yet. The probe reads only root_ca.crt and re-reads it on every check.
       - ${CERTAGENT_HOME:-../cert-verif-app}/lab/certs:/certs:ro
 
+  # Between CertAgent and Ollama: start CertAgent with OLLAMA_URL=http://localhost:11435. Streams the model's
+  # reasoning to /live for the probe page; CertAgent still gets the same single answer from Ollama.
+  reasoning-relay:
+    build: ./reasoning-relay
+    restart: unless-stopped
+    ports:
+      - "11435:11435"
+    environment:
+      UPSTREAM: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 networks:
   default:
     name: certagent-lab_default
