@@ -63,7 +63,8 @@ public class TrafficProbe {
 
     static final List<Target> TARGETS = List.of(
             new Target("demo.lab", "demo.lab", 443, "/api/products", "lab"),
-            new Target("shop.prod", "shop.prod", 8444, "/api/orders", "prod"));
+            new Target("shop.prod", "shop.prod", 8444, "/api/orders", "prod"),
+            new Target("accounts.lab", "accounts.lab", 8445, "/api/users", "lab"));
 
     static final List<Deque<Check>> HISTORY = new ArrayList<>();
 

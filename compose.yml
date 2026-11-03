@@ -18,6 +18,10 @@ services:
     build: ./checkout
     restart: unless-stopped
 
+  accounts:
+    build: ./accounts
+    restart: unless-stopped
+
   traffic-probe:
     build: ./traffic-probe
     restart: unless-stopped
