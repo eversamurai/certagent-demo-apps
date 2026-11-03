@@ -14,7 +14,7 @@ when a certificate breaks and recover when CertAgent fixes it.
 | checkout | `checkout/` | The same, for payments: `/`, `/api/health`, `/api/orders` |
 | accounts | `accounts/` | The same, for sign-in and profiles: `/`, `/api/health`, `/api/users`. Behind `accounts.lab` (:8445), used by `scenario.sh hostname` |
 | traffic-probe | `traffic-probe/` | Java 21 HTTPS client checking all three sites every 2s, plus a status page on **:8090** |
-| reasoning-relay | `reasoning-relay/` | Java 21 proxy between CertAgent and Ollama on **:11435**. Asks Ollama for a stream, publishes the thinking tokens on `/live` (server-sent events), and returns the same single answer CertAgent expects |
+| reasoning-relay | `reasoning-relay/` | Feeds the live reasoning panel on the probe page, on **:11435** (`/live`, server-sent events), for either model. **Muse Spark (hosted, the default):** follows CertAgent's timeline and replays the reasoning Spark writes on every tool call, each call with its policy badge, and its verdict. **Local Glimmer:** sits between CertAgent and Ollama (`OLLAMA_URL=http://localhost:11435`), asks Ollama for a stream, publishes the thinking tokens, and returns the same single answer CertAgent expects |
 | nginx overlay | `lab-overlay/` | The lab's `nginx.conf`, with `proxy_pass` to the apps in place of placeholder text, plus a compose override that swaps it in |
 | compose | `compose.yml` | Project `certagent-demo`: the apps and the probe on the lab's network (`certagent-lab_default`) |
 | scripts | `demo/` | `reset.sh`, `scenario.sh fixed\|approval\|rollback`, `RUNBOOK.md` |

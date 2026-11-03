@@ -38,13 +38,16 @@ command from `D:\dev\demo_apps` in Git Bash. CertAgent itself runs from `D:\dev\
 demo/reset.sh                     # ~1 min; ends with "Ready". Probe: demo.lab OK, shop.prod WARN
 ```
 
-In the `cert-verif-app` terminal, point CertAgent at the reasoning relay so the model's thinking streams
-live into the panel under the probe tiles:
+Start CertAgent in the `cert-verif-app` terminal, from the repo root so it reads `config/application.yml`:
 
 ```bash
-export OLLAMA_URL=http://localhost:11435
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--certagent.schedule.run-on-startup=false
 ```
+
+With **Muse Spark** (the default) the panel under the probe tiles needs no setup. It shows the reasoning Spark
+writes for every tool call, the call with its policy badge, and its verdict, typed out as each step lands on the
+timeline. For **local Glimmer**, also set `CERTAGENT_MODEL=glimmer` and `OLLAMA_URL=http://localhost:11435`, so the
+panel shows Glimmer's thinking token by token instead.
 
 Wait until `http://localhost:8088` loads with an empty timeline. **Start recording**, then:
 
@@ -53,8 +56,9 @@ demo/scenario.sh fixed
 ```
 
 Point at these, in order:
-0. **Reasoning panel (bottom of the probe page):** the model's thinking types out live, line by line, with
-   `→ calls verify_handshake(demo.lab)` / `renew_certificate(…)` lines when it acts. Talk over it while it runs.
+0. **Reasoning panel (bottom of the probe page):** the model's reasoning types out live, line by line, with
+   `→ calls verify_handshake(demo.lab) AUTO · lab` / `renew_certificate(…)` lines when it acts and its verdict in
+   green. For shop.prod the renew line shows `APPROVAL NEEDED · prod`. Talk over it while it runs.
 1. **Probe: demo.lab goes red.** The tile reads "certificate not trusted — unknown issuer", the issuer is
    *Rogue Corp Root*, and red squares start in the strip.
 2. **Timeline: the demo.lab card appears.** Observed → Diagnosed (untrusted issuer).
@@ -122,7 +126,7 @@ demo/reset.sh        # stop CertAgent first (Ctrl+C); removes the broken conf.d 
 | Card shows **Unresolved** or no renew in take 1 | The run may have used up `max-actions-per-run` (10 tool calls, verifies included). Reset and record again. If it happens again, record cases 1 and 2 as separate takes using `scenario.sh approval`. |
 | nginx won't start / `reset.sh` says "nginx -t fails" | Look at `cert-verif-app/lab/conf.d/` (`reset.sh` empties it) and at `docker compose -p certagent-lab logs nginx`. Never restart nginx between `break.sh reload` and a reset. |
 | Probe shows FAIL "service behind nginx is not answering" (HTTP 502) | An app container is down: `docker compose -f compose.yml ps`, then `docker compose -f compose.yml up -d`. |
-| Reasoning panel says "relay offline", or stays idle during a run | `docker compose -f compose.yml logs reasoning-relay`. Check that CertAgent was started with `OLLAMA_URL=http://localhost:11435`. |
+| Reasoning panel says "relay offline", or stays idle during a run | `docker compose -f compose.yml logs reasoning-relay`. With Spark, the relay reads `http://host.docker.internal:8088/api/events`, so CertAgent must be running. With Glimmer, also check that CertAgent was started with `OLLAMA_URL=http://localhost:11435`. |
 | Probe page doesn't load | `docker compose -f compose.yml logs traffic-probe`. Port 8090 may be busy. |
 | `reset.sh` refuses: "CertAgent is running" | Stop it with Ctrl+C first, so the timeline is really cleared. |
 | Ports busy | `netstat -ano \| grep -E ':(8080\|8443\|8444\|9000\|8088\|8090) '`, then stop whatever holds the port. |
