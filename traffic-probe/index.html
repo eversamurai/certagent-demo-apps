@@ -231,7 +231,11 @@ function typeChar(ch, cls) {
     if (cut > 0) cur.firstChild.textContent = curText.slice(0, cut);
     newLine(cls);
     curText = carry;
-    if (ch === ' ') { cur.firstChild.textContent = curText; return; }
+    if (ch === ' ') {
+      if (curText) curText += ' ';   // keep the space between the carried word and the next one
+      cur.firstChild.textContent = curText;
+      return;
+    }
   }
   curText += ch;
   cur.firstChild.textContent = curText;
@@ -267,7 +271,8 @@ live.onmessage = (m) => {
     setState(e.busy ? `thinking about ${e.label}…` : 'idle — waiting for the next decision', e.busy);
     if (e.busy && e.tail) { queue.push({ line: `— ${e.label} —`, cls: 'case' }); enqueueText(e.tail.slice(-240), ''); }
   } else if (e.type === 'start') {
-    $('#mind-model').textContent = e.model + ' · local';
+    // Ollama sends a bare model name (local); a hosted model's label already says where it runs.
+    $('#mind-model').textContent = e.model.includes('·') ? e.model : e.model + ' · local';
     setState(`thinking about ${e.label}…`, true);
     queue.push({ line: `— ${e.label} —`, cls: 'case' });
   } else if (e.type === 'think') {
@@ -275,9 +280,10 @@ live.onmessage = (m) => {
   } else if (e.type === 'say') {
     enqueueText(e.text, 'say');
   } else if (e.type === 'tool') {
-    queue.push({ line: `→ calls ${e.name}(${e.target})`, cls: 'tool' });
+    queue.push({ line: `→ calls ${e.name}(${e.target})` + (e.badge ? `   ${e.badge}` : ''), cls: 'tool' });
   } else if (e.type === 'end') {
-    setState(`idle — last decision took ${e.seconds}s`, false);
+    // Local model: the call's duration. Hosted model (from the timeline): the case's outcome.
+    setState(e.label ? `idle — ${e.label}: ${e.how}` : `idle — last decision took ${e.seconds}s`, false);
   }
 };
 </script>
