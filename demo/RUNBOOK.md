@@ -81,6 +81,19 @@ demo.lab **amber** ("weak key: RSA 1024 bits") but never red. Point at:
    while the agent tried the fix and backed it out. The script prints `worst probe state during the run: WARN
    (no outage)`.
 
+## 4b. Optional take: wrong hostname → Fixed (third site, accounts.lab)
+
+```bash
+demo/scenario.sh hostname
+```
+
+Someone installed the cert for the old name: accounts.lab serves a trusted lab-CA cert issued for
+`legacy-accounts.lab`. The probe turns accounts.lab **red**: "certificate is for a different hostname". Point at:
+1. **Diagnosed:** `hostname accounts.lab not in certificate SANs [legacy-accounts.lab]`, a fault the other cases
+   don't show. The issuer is trusted, so this isn't a trust problem.
+2. **The renew decision**, then Applied → Verified with the correct name.
+3. **The probe:** accounts.lab goes back to green, and the fingerprint matches the timeline (`match: yes`).
+
 ## 5. Clean-up
 
 ```bash
