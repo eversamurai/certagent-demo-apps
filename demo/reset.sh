@@ -13,19 +13,19 @@ fi
 # Our nginx.conf is a copy of the lab's with proxy_pass instead of placeholder text. If the lab's file gained
 # anything else (a new server, a changed ACME location), say so instead of silently serving an old copy.
 drift=$(grep -vxFf <(sed 's/\r$//' "$DEMO_APPS/lab-overlay/nginx.conf") <(sed 's/\r$//' "$CERTAGENT_HOME/lab/nginx/nginx.conf") \
-        | grep -vE 'return 200 "(demo\.lab|shop\.prod) OK|^\s*(#.*)?$' || true)
+        | grep -vE 'return 200 "(demo\.lab|shop\.prod|accounts\.lab) OK|^\s*(#.*)?$' || true)
 if [[ -n $drift ]]; then
   log "WARNING: lab/nginx/nginx.conf has lines the overlay copy lacks — update lab-overlay/nginx.conf:"
   printf '    %s\n' "$drift"
 fi
 
-log "lab: init.sh (CA, root export, 24h demo.lab cert, 4h shop.prod cert)"
+log "lab: init.sh (CA, root export, 24h demo.lab cert, 4h shop.prod cert, 24h accounts.lab cert)"
 (cd "$CERTAGENT_HOME" && ./lab/init.sh)
 
 log "apps + probe: build and start"
 "${APPS[@]}" up -d --build
 
-log "nginx: recreate with the overlay config (demo.lab -> storefront, shop.prod -> checkout)"
+log "nginx: recreate with the overlay config (demo.lab -> storefront, shop.prod -> checkout, accounts.lab -> accounts)"
 "${LAB[@]}" up -d --force-recreate nginx
 "${LAB[@]}" exec -T nginx grep -q 'proxy_pass' /etc/nginx/nginx.conf || fail "nginx is not running the overlay config"
 "${LAB[@]}" exec -T nginx nginx -t -q || fail "nginx -t fails after reset"
@@ -35,6 +35,7 @@ rm -rf "$CERTAGENT_HOME/data"
 
 wait_state demo.lab  'OK'      60
 wait_state shop.prod 'OK|WARN' 30
+wait_state accounts.lab 'OK'   30
 
 # Start the recording with clean strips: forget the failed checks from before nginx was up.
 log "probe: restarting to clear its history"
