@@ -32,8 +32,10 @@ services:
       # place if the file did not exist yet. The probe reads only root_ca.crt and re-reads it on every check.
       - ${CERTAGENT_HOME:-../cert-verif-app}/lab/certs:/certs:ro
 
-  # Between CertAgent and Ollama: start CertAgent with OLLAMA_URL=http://localhost:11435. Streams the model's
-  # reasoning to /live for the probe page; CertAgent still gets the same single answer from Ollama.
+  # Feeds the live reasoning panel on the probe page (/live). Hosted model (Muse Spark): follows CertAgent's
+  # timeline and replays the reasoning written on each tool call. Local Glimmer: start CertAgent with
+  # OLLAMA_URL=http://localhost:11435 and the relay streams Ollama's thinking tokens while still returning the same
+  # single answer CertAgent expects.
   reasoning-relay:
     build: ./reasoning-relay
     restart: unless-stopped
@@ -41,6 +43,7 @@ services:
       - "11435:11435"
     environment:
       UPSTREAM: http://host.docker.internal:11434
+      AGENT: http://host.docker.internal:8088
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

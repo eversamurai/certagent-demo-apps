@@ -32,6 +32,9 @@ import java.util.regex.Pattern;
 public class ReasoningRelay {
 
     static final String UPSTREAM = System.getenv().getOrDefault("UPSTREAM", "http://host.docker.internal:11434");
+    // CertAgent's timeline. A hosted model (Muse Spark) never passes through this relay, so its reasoning is taken
+    // from the `reasoning` it writes on every tool call, as recorded on the timeline.
+    static final String AGENT = System.getenv().getOrDefault("AGENT", "http://host.docker.internal:8088");
     static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     static final List<BlockingQueue<String>> LISTENERS = new CopyOnWriteArrayList<>();
     static final Pattern CASE = Pattern.compile("Case: target (\\S+)");
@@ -47,7 +50,87 @@ public class ReasoningRelay {
         server.createContext("/", ReasoningRelay::proxy);
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
-        System.out.println("reasoning-relay on :11435 -> " + UPSTREAM);
+        Thread.ofVirtual().name("timeline-follower").start(ReasoningRelay::followTimeline);
+        System.out.println("reasoning-relay on :11435 -> " + UPSTREAM + ", following " + AGENT + "/api/events");
+    }
+
+    // ---------------------------------------------------------------- hosted model: reasoning from the timeline
+
+    /**
+     * Polls CertAgent's timeline and replays a hosted model's decisions on /live: its reasoning for each tool call,
+     * the call itself with the policy badge, and its closing verdict. Cases decided by the local model are skipped,
+     * because its thinking already streams through {@link #chat}.
+     */
+    @SuppressWarnings("unchecked")
+    static void followTimeline() {
+        long since = -1;                       // -1: skip whatever happened before the relay started
+        java.util.Set<String> hosted = new java.util.HashSet<>();   // runId|target cases decided by a hosted model
+        int quiet = 0;
+        while (true) {
+            try {
+                // Every ~15s of silence, re-read from the start: if CertAgent restarted with an empty timeline its
+                // sequence numbers begin again at 1, and we'd otherwise wait forever for seq > since.
+                boolean resync = since > 0 && ++quiet >= 20;
+                HttpResponse<String> resp = HTTP.send(HttpRequest.newBuilder(
+                                URI.create(AGENT + "/api/events?since=" + (resync ? 0 : Math.max(since, 0))))
+                        .timeout(Duration.ofSeconds(5)).build(), HttpResponse.BodyHandlers.ofString());
+                List<Object> events = (List<Object>) Json.read(resp.body());
+                if (resync) {
+                    long max = 0;
+                    for (Object o : events) max = Math.max(max, Long.parseLong(((Json.Num) ((Map<String, Object>) o).get("seq")).raw()));
+                    if (max < since) since = max;   // timeline was reset; continue from where it is now
+                    quiet = 0;
+                    continue;
+                }
+                for (Object o : events) {
+                    Map<String, Object> e = (Map<String, Object>) o;
+                    long seq = Long.parseLong(((Json.Num) e.get("seq")).raw());
+                    if (since >= 0) replay(e, hosted);
+                    since = Math.max(since, seq);
+                    quiet = 0;
+                }
+                if (since < 0) since = 0;
+            } catch (Exception agentDown) {
+                // CertAgent not started yet, or restarted: keep trying
+            }
+            try {
+                Thread.sleep(700);
+            } catch (InterruptedException stop) {
+                return;
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static void replay(Map<String, Object> e, java.util.Set<String> hosted) {
+        String kind = String.valueOf(e.get("kind"));
+        if (!(e.get("target") instanceof String target)) return;   // run-level events
+        String key = e.get("runId") + "|" + target;
+        Map<String, Object> d = e.get("details") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+        String message = String.valueOf(e.get("message"));
+
+        if (kind.equals("PLAN")) {
+            // "asking muse-spark-1.3 · Meta Model API to decide" — the local model streams its own thinking instead.
+            String model = message.replaceFirst("^asking (.*) to decide$", "$1");
+            if (model.endsWith("· local")) return;
+            hosted.add(key);
+            label = target;
+            busy = true;
+            broadcast(Map.of("type", "start", "model", model, "label", target));
+        } else if (!hosted.contains(key)) {
+            return;
+        } else if (kind.equals("POLICY") && d.get("reasoning") instanceof String r && !r.isBlank()) {
+            broadcast(Map.of("type", "think", "text", r.strip() + "\n"));
+            broadcast(Map.of("type", "tool", "name", String.valueOf(d.get("tool")), "target", target,
+                    "badge", String.valueOf(d.getOrDefault("badge", ""))));
+        } else if (kind.equals("DONE")) {
+            if (d.get("summary") instanceof String s && !s.isBlank()) {
+                broadcast(Map.of("type", "say", "text", s.strip() + "\n"));
+            }
+            busy = false;
+            broadcast(Map.of("type", "end", "how", String.valueOf(d.get("outcome")), "label", target));
+            hosted.remove(key);
+        }
     }
 
     // ---------------------------------------------------------------- live feed (server-sent events)
