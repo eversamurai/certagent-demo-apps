@@ -126,6 +126,16 @@ demo/reset.sh
 
 ### 1.5 Start CertAgent (Terminal B)
 
+CertAgent needs Java 21 or newer. Point Maven at JDK 23 first; the `java` on your PATH is Java 17, which fails
+with `UnsupportedClassVersionError … class file version 65.0`.
+
+```bash
+export JAVA_HOME="/c/Program Files/Java/jdk-23.0.1"
+```
+
+To set it for every new Git Bash window, run once:
+`echo 'export JAVA_HOME="/c/Program Files/Java/jdk-23.0.1"' >> ~/.bashrc`
+
 ```bash
 ./mvnw spring-boot:run -Dspring-boot.run.arguments=--certagent.schedule.run-on-startup=false
 ```
