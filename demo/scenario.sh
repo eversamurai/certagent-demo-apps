@@ -4,7 +4,8 @@
 #   approval  nothing to break (shop.prod's 4h cert)        -> shop.prod Needs approval
 #   rollback  weak key + broken nginx config -> probe WARN  -> demo.lab Rolled back, probe never FAIL
 #   hostname  accounts.lab serves a cert for another name -> probe FAIL -> accounts.lab Fixed
-# Usage: demo/scenario.sh fixed|approval|rollback|hostname
+#   recover   after rollback: a human removes the broken nginx snippet -> demo.lab Fixed, probe back to OK
+# Usage: demo/scenario.sh fixed|approval|rollback|hostname|recover
 source "$(dirname "$0")/common.sh"
 
 mode=${1:-}
@@ -32,8 +33,15 @@ case "$mode" in
     "$BREAK" hostname
     wait_state accounts.lab FAIL 15
     ;;
+  recover)
+    # The rollback case leaves the weak cert in place until someone fixes the nginx config. This is that
+    # someone: remove the half-finished snippet, prove nginx accepts its config again, then let the agent retry.
+    rm -f "$CERTAGENT_HOME/lab/conf.d/zz-legacy.conf"
+    "${LAB[@]}" exec -T nginx nginx -t -q || fail "nginx -t still fails: look at $CERTAGENT_HOME/lab/conf.d/"
+    log "nginx config fixed by a human (conf.d/zz-legacy.conf removed); demo.lab is $(probe_state demo.lab)"
+    ;;
   *)
-    echo "usage: $0 fixed|approval|rollback|hostname" >&2
+    echo "usage: $0 fixed|approval|rollback|hostname|recover" >&2
     exit 2
     ;;
 esac

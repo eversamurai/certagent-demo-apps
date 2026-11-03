@@ -81,6 +81,19 @@ demo.lab **amber** ("weak key: RSA 1024 bits") but never red. Point at:
    while the agent tried the fix and backed it out. The script prints `worst probe state during the run: WARN
    (no outage)`.
 
+Then finish the story: an engineer removes the broken nginx snippet, and the agent completes the fix.
+
+```bash
+demo/scenario.sh recover
+```
+
+It deletes `conf.d/zz-legacy.conf`, checks that `nginx -t` passes, and runs CertAgent again. Point at:
+1. **The new demo.lab card: Fixed.** This time the reload succeeds, and Before (RSA 1024) / After (RSA 2048) show
+   the change.
+2. **The probe:** demo.lab turns **green OK**, `GET https://demo.lab:443/api/products` returns HTTP 200, the key
+   is RSA 2048, and the fingerprint matches the timeline (`match: yes`). The strip changes from amber to green
+   with no red in between.
+
 ## 4b. Optional take: wrong hostname → Fixed (third site, accounts.lab)
 
 ```bash
