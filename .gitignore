@@ -23,3 +23,6 @@ Thumbs.db
 
 # demo/scenario.sh scratch files
 .demo-tmp/
+
+# Agent instructions stay on this machine.
+/CLAUDE*.md
